@@ -1,0 +1,258 @@
+#include "projectdocument.h"
+
+#include "projectbuilder.h"
+
+namespace
+{
+const QString &resolvedPlacementMode(const QString &mode)
+{
+    static const QString absolute = QStringLiteral("absolute");
+    return mode.isEmpty() ? absolute : mode;
+}
+
+const QString &resolvedPoint(const QString &point)
+{
+    static const QString center = QStringLiteral("Center");
+    return point.isEmpty() ? center : point;
+}
+}
+
+ProjectDocument::ProjectDocument()
+{
+    reset();
+}
+
+void ProjectDocument::reset()
+{
+    m_importedShapeSnapshot.Nullify();
+    initializeStartupProject();
+    rebuild();
+}
+
+void ProjectDocument::setShape(const TopoDS_Shape &shape, const QString &description)
+{
+    m_importedShapeSnapshot = shape;
+    m_project.clear();
+    m_project.addOperation(QStringLiteral("import_step"),
+                           QStringLiteral("Import STEP"),
+                           {{QStringLiteral("Source"), description}});
+    rebuild();
+}
+
+bool ProjectDocument::addBoxOperation(const double length,
+                                      const double width,
+                                      const double height,
+                                      const double x,
+                                      const double y,
+                                      const double z,
+                                      const QString &placementMode,
+                                      const int referenceId,
+                                      const QString &referencePoint,
+                                      const QString &selfPoint)
+{
+    const int operationNumber = m_project.operationCount() + 1;
+    m_project.addOperation(QStringLiteral("box"),
+                           QStringLiteral("Box %1").arg(operationNumber),
+                           {{QStringLiteral("Length"), length},
+                            {QStringLiteral("Width"), width},
+                            {QStringLiteral("Height"), height},
+                            {QStringLiteral("PlacementMode"), resolvedPlacementMode(placementMode)},
+                            {QStringLiteral("ReferenceId"), referenceId},
+                            {QStringLiteral("ReferencePoint"), resolvedPoint(referencePoint)},
+                            {QStringLiteral("SelfPoint"), resolvedPoint(selfPoint)},
+                            {QStringLiteral("X"), x},
+                            {QStringLiteral("Y"), y},
+                            {QStringLiteral("Z"), z}});
+    return rebuild();
+}
+
+bool ProjectDocument::addCylinderOperation(const double radius,
+                                           const double height,
+                                           const double x,
+                                           const double y,
+                                           const double z,
+                                           const QString &placementMode,
+                                           const int referenceId,
+                                           const QString &referencePoint,
+                                           const QString &selfPoint)
+{
+    const int operationNumber = m_project.operationCount() + 1;
+    m_project.addOperation(QStringLiteral("cylinder"),
+                           QStringLiteral("Cylinder %1").arg(operationNumber),
+                           {{QStringLiteral("Radius"), radius},
+                            {QStringLiteral("Height"), height},
+                            {QStringLiteral("PlacementMode"), resolvedPlacementMode(placementMode)},
+                            {QStringLiteral("ReferenceId"), referenceId},
+                            {QStringLiteral("ReferencePoint"), resolvedPoint(referencePoint)},
+                            {QStringLiteral("SelfPoint"), resolvedPoint(selfPoint)},
+                            {QStringLiteral("X"), x},
+                            {QStringLiteral("Y"), y},
+                            {QStringLiteral("Z"), z}});
+    return rebuild();
+}
+
+bool ProjectDocument::addConeOperation(const double radius1,
+                                       const double radius2,
+                                       const double height,
+                                       const double x,
+                                       const double y,
+                                       const double z,
+                                       const QString &placementMode,
+                                       const int referenceId,
+                                       const QString &referencePoint,
+                                       const QString &selfPoint)
+{
+    const int operationNumber = m_project.operationCount() + 1;
+    m_project.addOperation(QStringLiteral("cone"),
+                           QStringLiteral("Cone %1").arg(operationNumber),
+                           {{QStringLiteral("Radius1"), radius1},
+                            {QStringLiteral("Radius2"), radius2},
+                            {QStringLiteral("Height"), height},
+                            {QStringLiteral("PlacementMode"), resolvedPlacementMode(placementMode)},
+                            {QStringLiteral("ReferenceId"), referenceId},
+                            {QStringLiteral("ReferencePoint"), resolvedPoint(referencePoint)},
+                            {QStringLiteral("SelfPoint"), resolvedPoint(selfPoint)},
+                            {QStringLiteral("X"), x},
+                            {QStringLiteral("Y"), y},
+                            {QStringLiteral("Z"), z}});
+    return rebuild();
+}
+
+bool ProjectDocument::addFilletOperation(const int sourceId, const double radius)
+{
+    if (sourceId <= 0)
+    {
+        m_buildResult.errorMessage = QStringLiteral("Fillet requires a valid source operation.");
+        return false;
+    }
+
+    const int operationNumber = m_project.operationCount() + 1;
+    m_project.addOperation(QStringLiteral("fillet"),
+                           QStringLiteral("Fillet %1").arg(operationNumber),
+                           {{QStringLiteral("SourceId"), sourceId},
+                            {QStringLiteral("Radius"), radius}});
+    return rebuild();
+}
+
+bool ProjectDocument::addFuseOperation(const int leftId, const int rightId)
+{
+    if (m_project.operationCount() < 2)
+    {
+        m_buildResult.errorMessage = QStringLiteral("Fuse requires at least two existing operations.");
+        return false;
+    }
+
+    if (leftId <= 0 || rightId <= 0 || leftId == rightId)
+    {
+        m_buildResult.errorMessage = QStringLiteral("Fuse requires two different source operations.");
+        return false;
+    }
+
+    const int operationNumber = m_project.operationCount() + 1;
+    m_project.addOperation(QStringLiteral("fuse"),
+                           QStringLiteral("Fuse %1").arg(operationNumber),
+                           {{QStringLiteral("LeftId"), leftId},
+                            {QStringLiteral("RightId"), rightId}});
+    return rebuild();
+}
+
+bool ProjectDocument::addCutOperation(const int leftId, const int rightId)
+{
+    if (m_project.operationCount() < 2)
+    {
+        m_buildResult.errorMessage = QStringLiteral("Cut requires at least two existing operations.");
+        return false;
+    }
+
+    if (leftId <= 0 || rightId <= 0 || leftId == rightId)
+    {
+        m_buildResult.errorMessage = QStringLiteral("Cut requires two different source operations.");
+        return false;
+    }
+
+    const int operationNumber = m_project.operationCount() + 1;
+    m_project.addOperation(QStringLiteral("cut"),
+                           QStringLiteral("Cut %1").arg(operationNumber),
+                           {{QStringLiteral("LeftId"), leftId},
+                            {QStringLiteral("RightId"), rightId}});
+    return rebuild();
+}
+
+bool ProjectDocument::setOperationParameter(const int operationId, const QString &name, const QVariant &value)
+{
+    if (!m_project.setOperationParameter(operationId, name, value))
+        return false;
+
+    return rebuild();
+}
+
+bool ProjectDocument::rebuild()
+{
+    m_buildResult = ProjectBuilder::build(m_project, m_importedShapeSnapshot);
+    return m_buildResult.success;
+}
+
+const TopoDS_Shape &ProjectDocument::shape() const
+{
+    return m_buildResult.shape;
+}
+
+bool ProjectDocument::hasShape() const
+{
+    return m_buildResult.success && !m_buildResult.shape.IsNull();
+}
+
+QString ProjectDocument::description() const
+{
+    return m_buildResult.description;
+}
+
+QString ProjectDocument::lastBuildError() const
+{
+    return m_buildResult.errorMessage;
+}
+
+int ProjectDocument::lastOperationId() const
+{
+    if (m_project.operations().isEmpty())
+        return -1;
+    return m_project.operations().constLast().id;
+}
+
+TopoDS_Shape ProjectDocument::shapeForOperation(const int id) const
+{
+    for (const OperationBuildShape &entry : m_buildResult.operationShapes)
+    {
+        if (entry.operationId == id)
+            return entry.shape;
+    }
+
+    return TopoDS_Shape();
+}
+
+const ProjectModel &ProjectDocument::project() const
+{
+    return m_project;
+}
+
+const OperationEntry *ProjectDocument::findOperation(const int id) const
+{
+    return m_project.findOperation(id);
+}
+
+void ProjectDocument::initializeStartupProject()
+{
+    m_project.clear();
+    m_project.addOperation(QStringLiteral("box"),
+                           QStringLiteral("Startup Box"),
+                           {{QStringLiteral("Length"), 120.0},
+                            {QStringLiteral("Width"), 80.0},
+                            {QStringLiteral("Height"), 60.0},
+                            {QStringLiteral("PlacementMode"), QStringLiteral("absolute")},
+                            {QStringLiteral("ReferenceId"), -1},
+                            {QStringLiteral("ReferencePoint"), QStringLiteral("Center")},
+                            {QStringLiteral("SelfPoint"), QStringLiteral("Center")},
+                            {QStringLiteral("X"), 0.0},
+                            {QStringLiteral("Y"), 0.0},
+                            {QStringLiteral("Z"), 0.0}});
+}

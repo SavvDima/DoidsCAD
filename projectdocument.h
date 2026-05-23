@@ -1,0 +1,59 @@
+#ifndef PROJECTDOCUMENT_H
+#define PROJECTDOCUMENT_H
+
+#include "buildresult.h"
+#include "projectmodel.h"
+
+#include <TopoDS_Shape.hxx>
+
+#include <QString>
+
+class ProjectDocument
+{
+public:
+    ProjectDocument();
+
+    void reset();
+    void setShape(const TopoDS_Shape &shape, const QString &description = QString());
+    bool addBoxOperation(double length, double width, double height,
+                         double x = 0.0, double y = 0.0, double z = 0.0,
+                         const QString &placementMode = {},
+                         int referenceId = -1,
+                         const QString &referencePoint = {},
+                         const QString &selfPoint = {});
+    bool addCylinderOperation(double radius, double height,
+                              double x = 0.0, double y = 0.0, double z = 0.0,
+                              const QString &placementMode = {},
+                              int referenceId = -1,
+                              const QString &referencePoint = {},
+                              const QString &selfPoint = {});
+    bool addConeOperation(double radius1, double radius2, double height,
+                          double x = 0.0, double y = 0.0, double z = 0.0,
+                          const QString &placementMode = {},
+                          int referenceId = -1,
+                          const QString &referencePoint = {},
+                          const QString &selfPoint = {});
+    int lastOperationId() const;
+    bool addFilletOperation(int sourceId, double radius);
+    bool addFuseOperation(int leftId, int rightId);
+    bool addCutOperation(int leftId, int rightId);
+    bool setOperationParameter(int operationId, const QString &name, const QVariant &value);
+    bool rebuild();
+
+    const TopoDS_Shape &shape() const;
+    bool hasShape() const;
+    QString description() const;
+    QString lastBuildError() const;
+    TopoDS_Shape shapeForOperation(int id) const;
+    const ProjectModel &project() const;
+    const OperationEntry *findOperation(int id) const;
+
+private:
+    void initializeStartupProject();
+
+    ProjectModel m_project;
+    BuildResult m_buildResult;
+    TopoDS_Shape m_importedShapeSnapshot;
+};
+
+#endif // PROJECTDOCUMENT_H
